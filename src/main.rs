@@ -22,7 +22,8 @@ use crate::iqdb::*;
 
 lazy_static! {
     static ref BOT_CONFIG: BotConfig = Config::builder()
-        .add_source(config::File::with_name("bot"))
+        .add_source(config::File::with_name("config"))
+        .add_source(config::Environment::with_prefix("APP"))
         .build()
         .expect("failed to load config")
         .try_deserialize()
