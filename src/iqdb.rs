@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use std::time::Duration;
 use async_trait::async_trait;
 use visdom::Vis;
