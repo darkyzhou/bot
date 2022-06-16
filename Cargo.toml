@@ -11,7 +11,6 @@ tokio-tungstenite = "*"
 async-trait = "0.1.53"
 lazy_static = "1.4.0"
 log = "0.4.17"
-env_logger = "0.9.0"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 config = { version = "0.13.1", features = ["toml"] }
@@ -20,3 +19,8 @@ regex = "1.5.5"
 visdom = { version = "0.5.2", features = ["text"] }
 snafu = "0.7.1"
 sled = "0.34.7"
+url = "2.2.2"
+nanoid = "0.4.0"
+simple-error = "0.2.3"
+pretty_env_logger = "0.4.0"
+human_bytes = { version = "0.3", features = ["fast"] }

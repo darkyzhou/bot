@@ -2,7 +2,7 @@ mod saucenao;
 mod searcher;
 mod ascii2d;
 mod iqdb;
-mod twitter;
+mod download;
 mod utils;
 mod database;
 mod message;
@@ -10,7 +10,7 @@ mod cfg;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use tokio::signal::unix::{signal, SignalKind};
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
@@ -21,7 +21,7 @@ use crate::cfg::*;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    pretty_env_logger::init();
 
     let (streams, _) = tokio_tungstenite::connect_async(&BOT_CONFIG.ws_url).await.expect("failed to connect to websocket server");
     let (mut write, read) = streams.split();
@@ -58,7 +58,7 @@ async fn main() {
             let message_to_send: Option<SendMessage> = match message {
                 OneBotMessageWrapper::Message(OneBotMessage::Message(message)) => match message {
                     OneBotUserMessage::Group(message) => searcher::on_group_message(message).await,
-                    OneBotUserMessage::Private(message) => twitter::on_private_message(message).await,
+                    OneBotUserMessage::Private(message) => download::on_private_message(message).await,
                 },
                 _ => None,
             };
