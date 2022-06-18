@@ -1,14 +1,13 @@
 use std::time::Duration;
+use anyhow::{bail, Context, Result};
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde_json::Value;
-use snafu::Snafu;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use futures_util::StreamExt;
 use log::{error, info};
 use nanoid::nanoid;
-use simple_error::SimpleError;
 use url::Url;
 
 use crate::cfg;
@@ -76,20 +75,8 @@ pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMes
     })
 }
 
-#[derive(Debug, Snafu)]
-enum SaveVideoError {
-    #[snafu(display("failed to request the api"))]
-    Request { video_id: i64, source: Box<dyn std::error::Error> },
-
-    #[snafu(display("failed to get url from api response"))]
-    Response { video_id: i64, response: String },
-
-    #[snafu(display("failed to download url"))]
-    Download { url: String, source: Box<dyn std::error::Error> },
-}
-
-async fn download_twitter_video(video_id: i64) -> Result<u64, SaveVideoError> {
-    async fn do_request(video_id: i64) -> Result<Value, Box<dyn std::error::Error>> {
+async fn download_twitter_video(video_id: i64) -> Result<u64> {
+    async fn do_request(video_id: i64) -> Result<Value> {
         let result = CLIENT.get(format!("https://6xmdq42sp7.execute-api.us-east-1.amazonaws.com/prod/videos/{}", video_id))
             .header(reqwest::header::REFERER, "https://twittervideo.org/")
             .header(reqwest::header::ORIGIN, "https://twittervideo.org/")
@@ -101,41 +88,46 @@ async fn download_twitter_video(video_id: i64) -> Result<u64, SaveVideoError> {
         Ok(result)
     }
 
-    let response: Value = do_request(video_id).await.map_err(|e| SaveVideoError::Request { video_id, source: e })?;
+    let response: Value = do_request(video_id).await.context("failed to request twittervideo.org api")?;
     let url = {
         let url = response.get("url").and_then(|value| value.as_str());
         match url {
-            None => { return Err(SaveVideoError::Response { video_id, response: response.to_string() }); }
+            None => bail!("fail to extract url from api response of twittervideo.org"),
             Some(url) => url
         }
     };
 
-    Ok(download_video(url).await?)
+    let size = download_video(url).await.context("failed to download video")?;
+    Ok(size)
 }
 
-fn get_file_name(url: &Url) -> Result<String, SimpleError> {
-    url.path().split('/').into_iter().rev().next().map(|name| name.to_string())
+fn get_file_name(url: &Url) -> Result<String> {
+    let result = url.path()
+        .split('/')
+        .into_iter()
+        .rev()
+        .next()
         .map(|name| {
             if name.contains('.') {
-                name
+                name.to_string()
             } else {
                 format!("{}.mp4", name)
             }
-        })
-        .ok_or_else(|| SimpleError::new("failed to locate file name"))
+        });
+    match result {
+        Some(name) => Ok(name),
+        None => bail!("failed to infer file name from {}", url.as_str())
+    }
 }
 
-async fn download_video(url: &str) -> Result<u64, SaveVideoError> {
-    let mut times = 3;
-    while times > 0 {
-        times -= 1;
+async fn download_video(url: &str) -> Result<u64> {
+    for times in 1..3 {
         match download(url).await {
             Ok(size) => { return Ok(size); }
             Err(err) => {
-                if times <= 0 {
-                    return Err(SaveVideoError::Download { url: url.to_string(), source: err });
+                if times >= 3 {
+                    return Err(err.context("download exceeds maximum retry times"));
                 }
-                error!("failed to download {}, will retry, error: {:#?}", url, err);
             }
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -143,7 +135,7 @@ async fn download_video(url: &str) -> Result<u64, SaveVideoError> {
     unreachable!()
 }
 
-async fn download(url: &str) -> Result<u64, Box<dyn std::error::Error>> {
+async fn download(url: &str) -> Result<u64> {
     let response = CLIENT.get(url)
         .header(reqwest::header::USER_AGENT, "curl/7.79.1")
         .send()

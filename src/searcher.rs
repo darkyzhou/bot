@@ -1,28 +1,30 @@
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::error::Error;
+use std::fmt::format;
+use anyhow::Result;
 use log::{error, info};
 use regex::Regex;
 
 use crate::database::*;
 use crate::message::*;
-use crate::utils;
-use crate::ascii2d;
+use crate::{ascii2d, utils};
 use crate::saucenao;
 use crate::iqdb;
 
 #[derive(Debug, PartialEq)]
 pub struct SourceImage {
     pub url: String,
+    pub searcher: &'static str,
     pub metadata: HashMap<String, String>,
 }
 
-pub type ImageSearchResult = Result<Option<SourceImage>, Box<dyn Error>>;
+pub type ImageSearchResult = Result<Option<SourceImage>>;
 
 #[async_trait]
 pub trait ImageSearcher {
     fn get_name(&self) -> &'static str;
+
     async fn search(&self, url: &str) -> ImageSearchResult;
 }
 
@@ -33,7 +35,8 @@ lazy_static! {
 
 pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage> {
     let OneBotGroupMessage { ref message, message_id, group_id, .. } = message;
-    if message.starts_with("[CQ:image") {
+
+    if message.contains("[CQ:image") {
         if let Some(caps) = IMAGE_URL_REGEX.captures(message) {
             if caps.len() < 2 {
                 return None;
@@ -43,11 +46,9 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
                 return None;
             }
         }
-    } else if message.starts_with("[CQ:reply") {
-        if !message.contains("查出处") && !message.contains("ccc") {
-            return None;
-        }
+    }
 
+    if message.contains("[CQ:reply") && (message.contains("查出处") || message.contains("ccc")) {
         if let Some(caps) = REPLY_ID_REGEX.captures(message) {
             if caps.len() < 2 {
                 return None;
@@ -55,20 +56,18 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
 
             if let Ok(ref reply_id) = caps[1].parse::<i32>() {
                 return match DATABASE.get(format!("image_url:{}", reply_id).as_str()) {
-                    Ok(Some(image_url)) => {
-                        let image_url = String::from_utf8(image_url.to_vec()).unwrap();
-                        Some(SendMessage::Group {
-                            group_id,
-                            message: match search_image(image_url.as_str()).await {
-                                Some(ref image) => format!("[CQ:reply,id={}]{}\n{}", message_id, image.url, utils::serialize_hashmap(&image.metadata)),
-                                None => format!("[CQ:reply,id={}]并没有找到出处", message_id)
-                            },
-                        })
-                    }
                     Ok(None) => None,
                     Err(err) => {
                         error!("failed to get record from database: {}", err);
                         None
+                    }
+                    Ok(Some(image_url)) => {
+                        let image_url = String::from_utf8(image_url.to_vec()).unwrap();
+                        let message = match search_image(image_url.as_str()).await.as_slice() {
+                            images @ [_, ..] => format!("[CQ:reply,id={}]{}", message_id, parse_result(images)),
+                            _ => format!("[CQ:reply,id={}]并没有找到出处", message_id)
+                        };
+                        Some(SendMessage::Group { group_id, message })
                     }
                 };
             }
@@ -88,30 +87,44 @@ lazy_static! {
     ]);
 }
 
-async fn search_image(url: &str) -> Option<SourceImage> {
+async fn search_image(url: &str) -> Vec<SourceImage> {
+    let mut tasks = vec![];
     for searcher in SEARCHERS.iter() {
-        info!("trying searcher {} for image {}", searcher.get_name(), url);
-        match searcher.search(url).await {
-            Ok(result) => {
-                match result {
-                    None => {
-                        info!("no results found");
-                        continue;
-                    }
-                    Some(mut image) => {
-                        info!("found result {}", &image.url);
-                        image.metadata.insert("服务".to_string(), searcher.get_name().to_string());
-                        return Some(image);
-                    }
+        tasks.push(searcher.search(url));
+    }
+
+    let results = futures::future::join_all(tasks.into_iter()).await;
+    results.into_iter()
+        .enumerate()
+        .filter_map(|(i, result)| {
+            match result {
+                Ok(Some(image)) => Some(image),
+                Ok(None) => {
+                    error!("source image not found for {} using {}", url, SEARCHERS[i].get_name());
+                    None
+                }
+                Err(err) => {
+                    error!("failed to search image {} using {}", url, SEARCHERS[i].get_name());
+                    None
                 }
             }
-            Err(err) => {
-                error!("failed to search the image: {:#?}", err);
-                continue;
-            }
-        };
-    }
-    None
+        })
+        .collect()
 }
 
-
+fn parse_result(images: &[SourceImage]) -> String {
+    images.iter()
+        .fold("🥵🥵🥵 色图出处 👇👇👇\n\n".to_string(), |mut result, image| {
+            let url = {
+                if let Some(pixiv_id) = utils::extract_pixiv_artwork_id(image.url.as_str()) {
+                    format!("{}\n国内加速: https://pixiv.re/{}", image.url.as_str(), pixiv_id)
+                } else {
+                    image.url.clone()
+                }
+            };
+            result.push_str(format!("⚠️ {}\n{}\n{}\n\n", image.searcher, utils::serialize_hashmap(&image.metadata), url).as_str());
+            result
+        })
+        .trim_end()
+        .to_string()
+}

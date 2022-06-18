@@ -32,11 +32,10 @@ pub struct SauceNaoImageSearchResultItemData {
     pub author_name: Option<String>,
 }
 
-
 #[async_trait]
 impl ImageSearcher for SauceNaoImageSearcher {
     fn get_name(&self) -> &'static str {
-        "SauceNao"
+        "saucenao"
     }
 
     async fn search(&self, url: &str) -> ImageSearchResult {
@@ -65,8 +64,11 @@ impl ImageSearcher for SauceNaoImageSearcher {
                     metadata.insert("标题".to_string(), title.clone());
                 }
 
+                let url = result.data.ext_urls.as_ref().unwrap().get(0).unwrap().clone();
+
                 return Ok(Some(SourceImage {
-                    url: result.data.ext_urls.as_ref().unwrap().get(0).unwrap().clone(),
+                    url,
+                    searcher: self.get_name(),
                     metadata,
                 }));
             }

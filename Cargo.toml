@@ -17,10 +17,11 @@ config = { version = "0.13.1", features = ["toml"] }
 futures-util = "0.3.21"
 regex = "1.5.5"
 visdom = { version = "0.5.2", features = ["text"] }
-snafu = "0.7.1"
+thiserror = "1.0.31"
+anyhow = "1.0.57"
 sled = "0.34.7"
 url = "2.2.2"
 nanoid = "0.4.0"
-simple-error = "0.2.3"
 pretty_env_logger = "0.4.0"
 human_bytes = { version = "0.3", features = ["fast"] }
+futures = "0.3.21"

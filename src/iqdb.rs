@@ -1,24 +1,10 @@
+use anyhow::anyhow;
 use std::collections::HashMap;
 use std::time::Duration;
 use async_trait::async_trait;
 use visdom::Vis;
-use snafu::prelude::*;
 
 use crate::searcher::*;
-
-#[derive(Debug, Snafu)]
-pub enum IqdbError {
-    #[snafu(display("Failed to parse response html from iqdb"))]
-    ParseHtml {
-        url: String,
-        source: visdom::types::BoxDynError,
-    },
-    #[snafu(display("Failed to find source url from parsed html"))]
-    FindSourceUrl {
-        url: String,
-        html: String,
-    },
-}
 
 pub struct IqdbImageSearcher {}
 
@@ -37,26 +23,22 @@ impl ImageSearcher for IqdbImageSearcher {
             .await?
             .error_for_status()?;
         let html = response.text().await?;
-        parse_result(url, html.as_str())
+        self.parse_result(html.as_str())
     }
 }
 
-fn parse_result(url: &str, html: &str) -> ImageSearchResult {
-    let root = Vis::load(html).map_err(|e| IqdbError::ParseHtml {
-        url: url.to_string(),
-        source: e,
-    })?;
-    let target = root.find("#pages > div + div");
-    let mut source_url = target.find("tr:nth-of-type(2) a").attr("href").ok_or(IqdbError::FindSourceUrl {
-        url: url.to_string(),
-        html: html.to_string(),
-    })?.to_string();
-    if source_url.starts_with("//") {
-        source_url = format!("https:{}", source_url);
+impl IqdbImageSearcher {
+    fn parse_result(&self, html: &str) -> ImageSearchResult {
+        let root = Vis::load(html).map_err(|e| anyhow!(e))?;
+        let target = root.find("#pages > div + div");
+        let mut source_url = target.find("tr:nth-of-type(2) a").attr("href").ok_or(anyhow!("failed to find href of the result"))?.to_string();
+        if source_url.starts_with("//") {
+            source_url = format!("https:{}", source_url);
+        }
+        Ok(Some(SourceImage {
+            url: source_url,
+            searcher: self.get_name(),
+            metadata: HashMap::default(),
+        }))
     }
-    Ok(Some(SourceImage {
-        url: source_url,
-        metadata: HashMap::default(),
-    }))
 }
-
