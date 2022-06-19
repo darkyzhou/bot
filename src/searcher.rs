@@ -117,7 +117,7 @@ fn parse_result(images: &[SourceImage]) -> String {
         .fold("🥵🥵🥵 色图出处 👇👇👇\n\n".to_string(), |mut result, image| {
             let url = {
                 if let Some(pixiv_id) = utils::extract_pixiv_artwork_id(image.url.as_str()) {
-                    format!("{}\n国内加速: https://pixiv.re/{}", image.url.as_str(), pixiv_id)
+                    format!("{}\n国内加速: https://pixiv.re/{}.png", image.url.as_str(), pixiv_id)
                 } else {
                     image.url.clone()
                 }
