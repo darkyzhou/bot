@@ -54,7 +54,6 @@ async fn main() {
 
             let data = message.expect("failed to read message").into_data();
             let data = String::from_utf8(data).expect("malformed message, not an utf-8 string");
-            let data = data.replacen("\"message_type\":\"group\",", "", 1);
 
             debug!("{}", data.as_str());
             let message: OneBotMessageWrapper =
