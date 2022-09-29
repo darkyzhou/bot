@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-use std::time::Duration;
+use crate::client::CLIENT;
+use crate::searcher::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use std::collections::HashMap;
 use visdom::Vis;
-
-use crate::searcher::*;
 
 pub struct Ascii2dImageSearcher {}
 
@@ -15,10 +14,8 @@ impl ImageSearcher for Ascii2dImageSearcher {
     }
 
     async fn search(&self, url: &str) -> ImageSearchResult {
-        let client = reqwest::Client::new();
-        let response = client.get(format!("https://ascii2d.net/search/url/{}", url))
-            .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36")
-            .timeout(Duration::from_secs(15))
+        let response = CLIENT
+            .get(format!("https://ascii2d.net/search/url/{}", url))
             .send()
             .await?
             .error_for_status()?;
@@ -31,7 +28,8 @@ impl Ascii2dImageSearcher {
     fn parse_result(&self, html: &str) -> ImageSearchResult {
         let root = Vis::load(html).map_err(|e| anyhow!(e))?;
         let item_box = root.find(".item-box ~ .item-box");
-        let source_url = item_box.find(".detail-box a:nth-of-type(1)")
+        let source_url = item_box
+            .find(".detail-box a:nth-of-type(1)")
             .attr("href")
             .ok_or_else(|| anyhow!("failed to find href for ascii2d result"))?
             .to_string();

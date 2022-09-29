@@ -1,9 +1,7 @@
 use anyhow::{bail, Context, Result};
 use futures_util::StreamExt;
-use lazy_static::lazy_static;
 use log::{error, info};
 use nanoid::nanoid;
-use regex::Regex;
 use serde_json::Value;
 use std::time::Duration;
 use tokio::fs::File;
@@ -11,23 +9,8 @@ use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use crate::cfg;
+use crate::client::*;
 use crate::message::*;
-use crate::utils;
-
-lazy_static! {
-    static ref CLIENT: reqwest::Client = {
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            reqwest::header::HeaderValue::from_static(utils::DEFAULT_HEADER),
-        );
-        reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(Duration::from_secs(20))
-            .build()
-            .unwrap()
-    };
-}
 
 pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMessage> {
     let OneBotPrivateMessage {

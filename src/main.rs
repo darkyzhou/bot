@@ -1,5 +1,6 @@
 mod ascii2d;
 mod cfg;
+mod client;
 mod database;
 mod download;
 mod iqdb;

@@ -1,9 +1,9 @@
-use serde::Deserialize;
+use crate::client::CLIENT;
+use crate::searcher::*;
 use async_trait::async_trait;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Duration;
-
-use crate::searcher::*;
 
 pub struct SauceNaoImageSearcher {
     pub api_key: String,
@@ -39,9 +39,15 @@ impl ImageSearcher for SauceNaoImageSearcher {
     }
 
     async fn search(&self, url: &str) -> ImageSearchResult {
-        let client = reqwest::Client::new();
-        let result: SauceNaoImageSearchResult = client.get("https://saucenao.com/search.php")
-            .query(&[("db", "999"), ("numres", "3"), ("api_key", self.api_key.as_ref()), ("output_type", "2"), ("url", url.as_ref())])
+        let result: SauceNaoImageSearchResult = CLIENT
+            .get("https://saucenao.com/search.php")
+            .query(&[
+                ("db", "999"),
+                ("numres", "3"),
+                ("api_key", self.api_key.as_ref()),
+                ("output_type", "2"),
+                ("url", url.as_ref()),
+            ])
             .timeout(Duration::from_secs(15))
             .send()
             .await?
@@ -52,7 +58,10 @@ impl ImageSearcher for SauceNaoImageSearcher {
             [result, ..] => {
                 let similarity = result.header.similarity.parse::<f64>()?;
 
-                if similarity < 0.95 || result.data.ext_urls.is_none() || result.data.ext_urls.as_ref().unwrap().is_empty() {
+                if similarity < 0.95
+                    || result.data.ext_urls.is_none()
+                    || result.data.ext_urls.as_ref().unwrap().is_empty()
+                {
                     return Ok(None);
                 }
 
@@ -64,7 +73,14 @@ impl ImageSearcher for SauceNaoImageSearcher {
                     metadata.insert("标题".to_string(), title.clone());
                 }
 
-                let url = result.data.ext_urls.as_ref().unwrap().get(0).unwrap().clone();
+                let url = result
+                    .data
+                    .ext_urls
+                    .as_ref()
+                    .unwrap()
+                    .get(0)
+                    .unwrap()
+                    .clone();
 
                 return Ok(Some(SourceImage {
                     url,
@@ -72,7 +88,7 @@ impl ImageSearcher for SauceNaoImageSearcher {
                     metadata,
                 }));
             }
-            _ => Ok(None)
+            _ => Ok(None),
         }
     }
 }

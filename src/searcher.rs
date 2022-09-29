@@ -1,16 +1,14 @@
+use crate::database::*;
+use crate::iqdb;
+use crate::message::*;
+use crate::saucenao;
+use crate::{ascii2d, utils};
+use anyhow::Result;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::fmt::format;
-use anyhow::Result;
-use log::{error, info};
+use log::error;
 use regex::Regex;
-
-use crate::database::*;
-use crate::message::*;
-use crate::{ascii2d, utils};
-use crate::saucenao;
-use crate::iqdb;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 pub struct SourceImage {
@@ -34,14 +32,21 @@ lazy_static! {
 }
 
 pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage> {
-    let OneBotGroupMessage { ref message, message_id, group_id, .. } = message;
+    let OneBotGroupMessage {
+        ref message,
+        message_id,
+        group_id,
+        ..
+    } = message;
 
     if message.contains("[CQ:image") {
         if let Some(caps) = IMAGE_URL_REGEX.captures(message) {
             if caps.len() < 2 {
                 return None;
             }
-            if let Err(err) = DATABASE.insert(format!("image_url:{}", message_id).as_str(), &caps[1]) {
+            if let Err(err) =
+                DATABASE.insert(format!("image_url:{}", message_id).as_str(), &caps[1])
+            {
                 error!("failed to insert record into database: {}", err);
                 return None;
             }
@@ -64,8 +69,10 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
                     Ok(Some(image_url)) => {
                         let image_url = String::from_utf8(image_url.to_vec()).unwrap();
                         let message = match search_image(image_url.as_str()).await.as_slice() {
-                            images @ [_, ..] => format!("[CQ:reply,id={}]{}", message_id, parse_result(images)),
-                            _ => format!("[CQ:reply,id={}]并没有找到出处", message_id)
+                            images @ [_, ..] => {
+                                format!("[CQ:reply,id={}]{}", message_id, parse_result(images))
+                            }
+                            _ => format!("[CQ:reply,id={}]并没有找到出处", message_id),
                         };
                         Some(SendMessage::Group { group_id, message })
                     }
@@ -94,37 +101,61 @@ async fn search_image(url: &str) -> Vec<SourceImage> {
     }
 
     let results = futures::future::join_all(tasks.into_iter()).await;
-    results.into_iter()
+    results
+        .into_iter()
         .enumerate()
-        .filter_map(|(i, result)| {
-            match result {
-                Ok(Some(image)) => Some(image),
-                Ok(None) => {
-                    error!("source image not found for {} using {}", url, SEARCHERS[i].get_name());
-                    None
-                }
-                Err(err) => {
-                    error!("failed to search image {} using {}", url, SEARCHERS[i].get_name());
-                    None
-                }
+        .filter_map(|(i, result)| match result {
+            Ok(Some(image)) => Some(image),
+            Ok(None) => {
+                error!(
+                    "source image not found for {} using {}",
+                    url,
+                    SEARCHERS[i].get_name()
+                );
+                None
+            }
+            Err(err) => {
+                error!(
+                    "failed to search image {} using {}: {:#?}",
+                    url,
+                    SEARCHERS[i].get_name(),
+                    err
+                );
+                None
             }
         })
         .collect()
 }
 
 fn parse_result(images: &[SourceImage]) -> String {
-    images.iter()
-        .fold("🥵🥵🥵 色图出处 👇👇👇\n\n".to_string(), |mut result, image| {
-            let url = {
-                if let Some(pixiv_id) = utils::extract_pixiv_artwork_id(image.url.as_str()) {
-                    format!("{}\n国内加速: https://pixiv.re/{}.png", image.url.as_str(), pixiv_id)
-                } else {
-                    image.url.clone()
-                }
-            };
-            result.push_str(format!("⚠️ {}\n{}\n{}\n\n", image.searcher, utils::serialize_hashmap(&image.metadata), url).as_str());
-            result
-        })
+    images
+        .iter()
+        .fold(
+            "🥵🥵🥵 色图出处 👇👇👇\n\n".to_string(),
+            |mut result, image| {
+                let url = {
+                    if let Some(pixiv_id) = utils::extract_pixiv_artwork_id(image.url.as_str()) {
+                        format!(
+                            "{}\n国内加速: https://pixiv.re/{}.png",
+                            image.url.as_str(),
+                            pixiv_id
+                        )
+                    } else {
+                        image.url.clone()
+                    }
+                };
+                result.push_str(
+                    format!(
+                        "⚠️ {}\n{}\n{}\n\n",
+                        image.searcher,
+                        utils::serialize_hashmap(&image.metadata),
+                        url
+                    )
+                    .as_str(),
+                );
+                result
+            },
+        )
         .trim_end()
         .to_string()
 }
