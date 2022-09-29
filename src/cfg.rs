@@ -14,5 +14,6 @@ lazy_static! {
 #[derive(Debug, Deserialize)]
 pub struct BotConfig {
     pub ws_url: String,
-    pub twitter_videos_path: String
+    pub twitter_videos_path: String,
+    pub proxy_url: Option<String>,
 }

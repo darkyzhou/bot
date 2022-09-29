@@ -1,29 +1,33 @@
+mod ascii2d;
+mod cfg;
+mod database;
+mod download;
+mod iqdb;
+mod message;
 mod saucenao;
 mod searcher;
-mod ascii2d;
-mod iqdb;
-mod download;
 mod utils;
-mod database;
-mod message;
-mod cfg;
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use log::{debug, error, warn};
-use tokio::signal::unix::{signal, SignalKind};
 use futures_util::{SinkExt, StreamExt};
+use log::{debug, error, info, warn};
+use std::sync::Arc;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 
+use crate::cfg::*;
 use crate::database::*;
 use crate::message::*;
-use crate::cfg::*;
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
 
-    let (streams, _) = tokio_tungstenite::connect_async(&BOT_CONFIG.ws_url).await.expect("failed to connect to websocket server");
+    let (streams, _) = tokio_tungstenite::connect_async(&BOT_CONFIG.ws_url)
+        .await
+        .expect("failed to connect to websocket server");
+    info!("connected to the server");
+
     let (mut write, read) = streams.split();
     let (tx, mut rx) = mpsc::channel::<SendMessage>(128);
 
@@ -53,12 +57,15 @@ async fn main() {
             let data = data.replacen("\"message_type\":\"group\",", "", 1);
 
             debug!("{}", data.as_str());
-            let message: OneBotMessageWrapper = serde_json::from_str(data.as_str()).expect("malformed json");
+            let message: OneBotMessageWrapper =
+                serde_json::from_str(data.as_str()).expect("malformed json");
 
             let message_to_send: Option<SendMessage> = match message {
                 OneBotMessageWrapper::Message(OneBotMessage::Message(message)) => match message {
                     OneBotUserMessage::Group(message) => searcher::on_group_message(message).await,
-                    OneBotUserMessage::Private(message) => download::on_private_message(message).await,
+                    OneBotUserMessage::Private(message) => {
+                        download::on_private_message(message).await
+                    }
                 },
                 _ => None,
             };
@@ -68,10 +75,14 @@ async fn main() {
                     error!("failed to send SendGroupMessage: {}", err);
                 }
             }
-        }).await;
+        })
+        .await;
     });
 
-    let (mut int_signal, mut term_signal) = (signal(SignalKind::interrupt()).unwrap(), signal(SignalKind::terminate()).unwrap());
+    let (mut int_signal, mut term_signal) = (
+        signal(SignalKind::interrupt()).unwrap(),
+        signal(SignalKind::terminate()).unwrap(),
+    );
     tokio::select! {
         _ = int_signal.recv() => {},
         _ = term_signal.recv() => {},
