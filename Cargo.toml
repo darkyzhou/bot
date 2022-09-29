@@ -3,11 +3,6 @@ name = "bot"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-# Force openssl-sys to staticly link in the openssl library. Necessary when
-# cross compiling to x86_64-unknown-linux-musl.
-vendored-openssl = ["openssl-sys/vendored"]
-
 [dependencies]
 reqwest = { version = "0.11.10", features = ["json", "rustls-tls", "stream"] }
 tokio = { version = "1", features = ["full"] }
