@@ -1,3 +1,4 @@
+use crate::cfg;
 use crate::database::*;
 use crate::iqdb;
 use crate::message::*;
@@ -88,7 +89,7 @@ lazy_static! {
     static ref SEARCHERS: Box<[Box<dyn ImageSearcher + Send + Sync>]> = Box::new([
         Box::new(ascii2d::Ascii2dImageSearcher {}),
         Box::new(saucenao::SauceNaoImageSearcher {
-            api_key: "978457bfdcbbfd9a205a9ee13d6621c6970023f7".to_string()
+            api_key: cfg::BOT_CONFIG.saucenao_api_key.clone()
         }),
         Box::new(iqdb::IqdbImageSearcher {})
     ]);

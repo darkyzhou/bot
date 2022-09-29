@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::time::Duration;
 use visdom::Vis;
 
 use crate::client::*;
@@ -16,9 +15,8 @@ impl ImageSearcher for IqdbImageSearcher {
     }
 
     async fn search(&self, url: &str) -> ImageSearchResult {
-        let response = CLIENT.get(format!("https://iqdb.org/?url={}", url))
-            .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36")
-            .timeout(Duration::from_secs(20))
+        let response = CLIENT
+            .get(format!("https://iqdb.org/?url={}", url))
             .send()
             .await?
             .error_for_status()?;

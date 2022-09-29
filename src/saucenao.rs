@@ -3,7 +3,6 @@ use crate::searcher::*;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::time::Duration;
 
 pub struct SauceNaoImageSearcher {
     pub api_key: String,
@@ -48,7 +47,6 @@ impl ImageSearcher for SauceNaoImageSearcher {
                 ("output_type", "2"),
                 ("url", url.as_ref()),
             ])
-            .timeout(Duration::from_secs(15))
             .send()
             .await?
             .error_for_status()?
