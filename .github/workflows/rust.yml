@@ -15,12 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      uses: heroku/rust-cargo-musl-action@v1
-      with:
-        command: 'build'
-        flags: '-r --features vendored-openssl'
+      run: cargo build -r
     - name: Archive production artifacts
       uses: actions/upload-artifact@v3
       with:
         name: bot
-        path: ${{ steps.compile.outputs.release-dir }}/bot
+        path: target/release/bot
