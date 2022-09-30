@@ -15,7 +15,7 @@ use crate::cfg;
 use crate::client::*;
 use crate::message::*;
 
-pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMessage> {
+pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<BotResponseAction> {
     let OneBotPrivateMessage {
         user_id, message, ..
     } = message;
@@ -25,14 +25,14 @@ pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMes
 
     let message = message.trim();
     match handle_download_command(&message).await {
-        Some(Ok((size, _))) => Some(SendMessage::Private {
+        Some(Ok((size, _))) => Some(BotResponseAction::PrivateMessage {
             user_id,
             message: format!(
                 "视频保存成功，大小: {}",
                 human_bytes::human_bytes(size as f64)
             ),
         }),
-        Some(Err(err)) => Some(SendMessage::Private {
+        Some(Err(err)) => Some(BotResponseAction::PrivateMessage {
             user_id,
             message: format!("保存视频时出错: {:#?}", err),
         }),
@@ -40,7 +40,7 @@ pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMes
     }
 }
 
-pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage> {
+pub async fn on_group_message(message: OneBotGroupMessage) -> Option<BotResponseAction> {
     let OneBotGroupMessage {
         message,
         user_id,
@@ -53,11 +53,12 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
 
     let message = message.trim();
     match handle_download_command(message).await {
-        Some(Ok((_, path))) => Some(SendMessage::Group {
+        Some(Ok((_, path))) => Some(BotResponseAction::GroupFile {
             group_id,
-            message: format!("[CQ:video,file=file://{}]", path),
+            file: path.clone(),
+            name: Path::new(&path).file_name()?.to_str()?.to_string(),
         }),
-        Some(Err(err)) => Some(SendMessage::Group {
+        Some(Err(err)) => Some(BotResponseAction::GroupMessage {
             group_id,
             message: format!("保存视频时出错: {:#?}", err),
         }),

@@ -32,7 +32,7 @@ lazy_static! {
     static ref REPLY_ID_REGEX: Regex = Regex::new(r"id=([^]]+)]").unwrap();
 }
 
-pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage> {
+pub async fn on_group_message(message: OneBotGroupMessage) -> Option<BotResponseAction> {
     let OneBotGroupMessage {
         ref message,
         message_id,
@@ -75,7 +75,7 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
                             }
                             _ => format!("[CQ:reply,id={}]并没有找到出处", message_id),
                         };
-                        Some(SendMessage::Group { group_id, message })
+                        Some(BotResponseAction::GroupMessage { group_id, message })
                     }
                 };
             }

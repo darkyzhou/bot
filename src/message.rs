@@ -44,9 +44,15 @@ pub enum OneBotMessageWrapper {
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "action", content = "params")]
-pub enum SendMessage {
+pub enum BotResponseAction {
     #[serde(rename = "send_group_msg")]
-    Group { group_id: i64, message: String },
+    GroupMessage { group_id: i64, message: String },
+    #[serde(rename = "upload_group_file")]
+    GroupFile {
+        group_id: i64,
+        file: String,
+        name: String,
+    },
     #[serde(rename = "send_private_msg")]
-    Private { user_id: i64, message: String },
+    PrivateMessage { user_id: i64, message: String },
 }

@@ -29,7 +29,7 @@ async fn main() {
     info!("connected to the server");
 
     let (mut write, read) = streams.split();
-    let (tx, mut rx) = mpsc::channel::<SendMessage>(128);
+    let (tx, mut rx) = mpsc::channel::<BotResponseAction>(128);
 
     tokio::spawn(async move {
         while let Some(ref message) = rx.recv().await {
@@ -59,7 +59,7 @@ async fn main() {
             let message: OneBotMessageWrapper =
                 serde_json::from_str(data.as_str()).expect("malformed json");
 
-            let messages_to_send: Vec<SendMessage> = match message {
+            let messages_to_send: Vec<BotResponseAction> = match message {
                 OneBotMessageWrapper::Message(OneBotMessage::Message(message)) => match message {
                     OneBotUserMessage::Group(message) => [
                         searcher::on_group_message(message.clone()).await,
