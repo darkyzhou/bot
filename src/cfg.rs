@@ -17,4 +17,5 @@ pub struct BotConfig {
     pub twitter_videos_path: String,
     pub proxy_url: Option<String>,
     pub saucenao_api_key: String,
+    pub admin_user_id: i64,
 }

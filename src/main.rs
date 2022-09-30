@@ -9,16 +9,15 @@ mod saucenao;
 mod searcher;
 mod utils;
 
+use crate::cfg::*;
+use crate::database::*;
+use crate::message::*;
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error, info, warn};
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-
-use crate::cfg::*;
-use crate::database::*;
-use crate::message::*;
 
 #[tokio::main]
 async fn main() {
@@ -60,19 +59,28 @@ async fn main() {
             let message: OneBotMessageWrapper =
                 serde_json::from_str(data.as_str()).expect("malformed json");
 
-            let message_to_send: Option<SendMessage> = match message {
+            let messages_to_send: Vec<SendMessage> = match message {
                 OneBotMessageWrapper::Message(OneBotMessage::Message(message)) => match message {
-                    OneBotUserMessage::Group(message) => searcher::on_group_message(message).await,
+                    OneBotUserMessage::Group(message) => [
+                        searcher::on_group_message(message.clone()).await,
+                        download::on_group_message(message.clone()).await,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
                     OneBotUserMessage::Private(message) => {
-                        download::on_private_message(message).await
+                        [download::on_private_message(message).await]
+                            .into_iter()
+                            .flatten()
+                            .collect()
                     }
                 },
-                _ => None,
+                _ => vec![],
             };
 
-            if let Some(message) = message_to_send {
+            for message in messages_to_send {
                 if let Err(err) = tx.send(message).await {
-                    error!("failed to send SendGroupMessage: {}", err);
+                    error!("failed to send message: {:#?}", err);
                 }
             }
         })

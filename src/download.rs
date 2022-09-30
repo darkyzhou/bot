@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
-use log::{error, info};
+use log::info;
 use nanoid::nanoid;
 use regex::Regex;
 use std::time::Duration;
@@ -18,44 +18,63 @@ pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<SendMes
     let OneBotPrivateMessage {
         user_id, message, ..
     } = message;
-    let message = message.trim();
-
-    if user_id != 2569766005 {
+    if user_id != cfg::BOT_CONFIG.admin_user_id {
         return None;
     }
 
-    let message_to_send: Option<String> = {
-        if message.contains("twitter.com") {
-            match download_twitter_video(message).await {
-                Err(err) => {
-                    error!("failed to download the twitter video: {:#?}", err);
-                    Some(format!("视频保存失败 {:#?}", err))
-                }
-                Ok(size) => Some(format!(
-                    "视频保存成功，大小: {}",
-                    human_bytes::human_bytes(size as f64)
-                )),
-            }
-        } else if let Some(url) = message.strip_prefix("v ") {
-            match download_video(url).await {
-                Err(err) => {
-                    error!("failed to download the video: {:#?}", err);
-                    Some("视频保存失败".to_string())
-                }
-                Ok(size) => Some(format!(
-                    "视频保存成功，大小: {}",
-                    human_bytes::human_bytes(size as f64)
-                )),
-            }
-        } else {
-            None
-        }
-    };
-
-    message_to_send.map(|message| SendMessage::Private { user_id, message })
+    let message = message.trim();
+    match handle_download_command(&message).await {
+        Some(Ok((size, _))) => Some(SendMessage::Private {
+            user_id,
+            message: format!(
+                "视频保存成功，大小: {}",
+                human_bytes::human_bytes(size as f64)
+            ),
+        }),
+        Some(Err(err)) => Some(SendMessage::Private {
+            user_id,
+            message: format!("保存视频时出错: {:#?}", err),
+        }),
+        None => None,
+    }
 }
 
-async fn download_twitter_video(url: &str) -> Result<u64> {
+pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage> {
+    let OneBotGroupMessage {
+        message,
+        user_id,
+        group_id,
+        ..
+    } = message;
+    if user_id != cfg::BOT_CONFIG.admin_user_id {
+        return None;
+    }
+
+    let message = message.trim();
+    match handle_download_command(&message).await {
+        Some(Ok((_, path))) => Some(SendMessage::Group {
+            group_id,
+            message: format!("[CQ:video,file=file://{}]", path),
+        }),
+        Some(Err(err)) => Some(SendMessage::Group {
+            group_id,
+            message: format!("保存视频时出错: {:#?}", err),
+        }),
+        None => None,
+    }
+}
+
+async fn handle_download_command(message: &str) -> Option<Result<(u64, String)>> {
+    if message.contains("twitter.com") {
+        Some(download_twitter_video(message).await)
+    } else if let Some(url) = message.strip_prefix("v ") {
+        Some(download_video(url).await)
+    } else {
+        None
+    }
+}
+
+async fn download_twitter_video(url: &str) -> Result<(u64, String)> {
     async fn do_request(url: &str) -> Result<String> {
         let result = CLIENT
             .post("https://twdown.net/download.php")
@@ -121,8 +140,8 @@ fn get_file_name(url: &Url) -> Result<String> {
     }
 }
 
-async fn download_video(url: &str) -> Result<u64> {
-    for times in 1..3 {
+async fn download_video(url: &str) -> Result<(u64, String)> {
+    for times in 1..4 {
         match download(url).await {
             Ok(size) => {
                 return Ok(size);
@@ -133,12 +152,12 @@ async fn download_video(url: &str) -> Result<u64> {
                 }
             }
         }
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
     }
-    unreachable!()
+    return Err(anyhow!("download exceeds maximum retry times"));
 }
 
-async fn download(url: &str) -> Result<u64> {
+async fn download(url: &str) -> Result<(u64, String)> {
     let response = CLIENT.get(url).send().await?.error_for_status()?;
     let file_name = get_file_name(response.url()).unwrap_or(format!("{}.mp4", nanoid!()));
     let path = format!("{}/{}", cfg::BOT_CONFIG.twitter_videos_path, file_name);
@@ -151,7 +170,7 @@ async fn download(url: &str) -> Result<u64> {
         file.write_all(&item?).await?;
     }
     info!("download finished for url {}", url);
-    Ok(size)
+    Ok((size, path))
 }
 
 #[cfg(test)]

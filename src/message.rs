@@ -7,9 +7,7 @@ pub enum OneBotMessage {
     Message(OneBotUserMessage),
 
     #[serde(rename = "meta_event")]
-    Meta {
-        meta_event_type: String
-    },
+    Meta { meta_event_type: String },
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,17 +20,18 @@ pub enum OneBotUserMessage {
     Group(OneBotGroupMessage),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct OneBotPrivateMessage {
     pub message_id: i32,
     pub user_id: i64,
     pub message: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct OneBotGroupMessage {
     pub message_id: i32,
     pub group_id: i64,
+    pub user_id: i64,
     pub message: String,
 }
 
@@ -47,13 +46,7 @@ pub enum OneBotMessageWrapper {
 #[serde(tag = "action", content = "params")]
 pub enum SendMessage {
     #[serde(rename = "send_group_msg")]
-    Group {
-        group_id: i64,
-        message: String,
-    },
+    Group { group_id: i64, message: String },
     #[serde(rename = "send_private_msg")]
-    Private {
-        user_id: i64,
-        message: String,
-    },
+    Private { user_id: i64, message: String },
 }

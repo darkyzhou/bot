@@ -96,12 +96,8 @@ lazy_static! {
 }
 
 async fn search_image(url: &str) -> Vec<SourceImage> {
-    let mut tasks = vec![];
-    for searcher in SEARCHERS.iter() {
-        tasks.push(searcher.search(url));
-    }
-
-    let results = futures::future::join_all(tasks.into_iter()).await;
+    let tasks = SEARCHERS.iter().map(|searcher| searcher.search(url));
+    let results = futures::future::join_all(tasks).await;
     results
         .into_iter()
         .enumerate()
