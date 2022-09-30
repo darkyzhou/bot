@@ -1,9 +1,10 @@
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn};
 use nanoid::nanoid;
 use regex::Regex;
+use std::path::Path;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -51,7 +52,7 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<SendMessage
     }
 
     let message = message.trim();
-    match handle_download_command(&message).await {
+    match handle_download_command(message).await {
         Some(Ok((_, path))) => Some(SendMessage::Group {
             group_id,
             message: format!("[CQ:video,file=file://{}]", path),
@@ -142,7 +143,7 @@ fn get_file_name(url: &Url) -> Result<String> {
 
 async fn download_video(url: &str) -> Result<(u64, String)> {
     for times in 1..4 {
-        match download(url).await {
+        match do_download_video(url).await {
             Ok(size) => {
                 return Ok(size);
             }
@@ -157,14 +158,25 @@ async fn download_video(url: &str) -> Result<(u64, String)> {
     return Err(anyhow!("download exceeds maximum retry times"));
 }
 
-async fn download(url: &str) -> Result<(u64, String)> {
+async fn do_download_video(url: &str) -> Result<(u64, String)> {
     let response = CLIENT.get(url).send().await?.error_for_status()?;
     let file_name = get_file_name(response.url()).unwrap_or(format!("{}.mp4", nanoid!()));
     let path = format!("{}/{}", cfg::BOT_CONFIG.twitter_videos_path, file_name);
     let size = response.content_length().unwrap_or(0);
     info!("downloading video from {} to {}, size: {}", url, path, size);
 
-    let mut file = File::create(path.as_str()).await?;
+    if let Ok(metadata) = tokio::fs::metadata(&path).await {
+        let len = metadata.len();
+        if len == size {
+            return Ok((size, path));
+        }
+        warn!(
+            "video file {} exists, but size unmatched, expected {} actual {}",
+            path, size, len
+        )
+    }
+
+    let mut file = File::create(&path).await?;
     let mut stream = response.bytes_stream();
     while let Some(item) = stream.next().await {
         file.write_all(&item?).await?;
