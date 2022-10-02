@@ -24,8 +24,10 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<BotResponse
     }
 
     let messaeg_to_send = {
-        let url = message.strip_prefix("i").or_else(|| message.strip_prefix("ig"))?;
-        let process = message.starts_with("ig");
+        let url = message
+            .strip_prefix("i")
+            .or_else(|| message.strip_prefix("ig"))?;
+        let process = message.starts_with("i");
         match handle_request(url, process).await {
             Err(err) => format!("{:#?}", err),
             Ok(path) => format!("[CQ:image,file=file://{}]", path),
@@ -38,12 +40,19 @@ pub async fn on_group_message(message: OneBotGroupMessage) -> Option<BotResponse
     })
 }
 
-async fn handle_request(message: &str, process: bool) -> Result<String> {
-    let image_url = get_twitter_image_url(message)
-        .await
-        .context("Failed to get image url")?
-        .ok_or_else(|| anyhow!("No image urls found"))?;
+async fn handle_request(url: &str, process: bool) -> Result<String> {
+    let image_url = {
+        if url.contains("twitter.com") {
+            get_twitter_image_url(url)
+                .await
+                .context("Failed to get image url")?
+                .ok_or_else(|| anyhow!("No image urls found"))?
+        } else {
+            url.to_string()
+        }
+    };
     let image_url = url::Url::from_str(&image_url).context("Failed to parse url")?;
+
     let path = download_image(&image_url)
         .await
         .context("Failed to download the image")?;
@@ -133,9 +142,21 @@ fn do_process_image(image_path: &str, output_directory: &str) -> Result<String> 
         .grayscale()
         .into_luma8();
     let mut img = imageproc::filter::box_filter(&img, 4, 4);
-    imageproc::contrast::threshold_mut(&mut img, 120);
 
-    static ALPHA: f32 = 0.3;
+    let avg = {
+        let mut avg = 0f64;
+        let total = (img.height() * img.width()) as f64;
+        for y in 0..img.height() {
+            for x in 0..img.width() {
+                let l = img.get_pixel(x, y);
+                avg += l.0[0] as f64 / total;
+            }
+        }
+        avg as u8
+    };
+    imageproc::contrast::threshold_mut(&mut img, avg);
+
+    static ALPHA: f32 = 0.1;
     let mut blend = image::ImageBuffer::new(img.width(), img.height());
     for y in 0..img.height() {
         for x in 0..img.width() {
