@@ -25,3 +25,5 @@ nanoid = "0.4.0"
 pretty_env_logger = "0.4.0"
 human_bytes = { version = "0.3", features = ["fast"] }
 futures = "0.3.21"
+imageproc = "0.23.0"
+image = "0.24.4"

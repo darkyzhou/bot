@@ -3,6 +3,7 @@ mod cfg;
 mod client;
 mod database;
 mod download;
+mod image;
 mod iqdb;
 mod message;
 mod saucenao;
@@ -64,6 +65,7 @@ async fn main() {
                     OneBotUserMessage::Group(message) => [
                         searcher::on_group_message(message.clone()).await,
                         download::on_group_message(message.clone()).await,
+                        image::on_group_message(message.clone()).await,
                     ]
                     .into_iter()
                     .flatten()

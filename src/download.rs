@@ -1,19 +1,14 @@
-use anyhow::{anyhow, bail, Context, Result};
-use futures_util::StreamExt;
+use anyhow::{anyhow, Context, Result};
 use lazy_static::lazy_static;
-use log::{info, warn};
 use nanoid::nanoid;
 use regex::Regex;
 use std::path::Path;
 use std::time::Duration;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-use url::Url;
 use visdom::Vis;
 
-use crate::cfg;
 use crate::client::*;
 use crate::message::*;
+use crate::{cfg, utils};
 
 pub async fn on_private_message(message: OneBotPrivateMessage) -> Option<BotResponseAction> {
     let OneBotPrivateMessage {
@@ -128,20 +123,6 @@ fn find_url_from_response(html: &str) -> Result<Option<String>> {
         .map(|(url, _)| url))
 }
 
-fn get_file_name(url: &Url) -> Result<String> {
-    let result = url.path().split('/').into_iter().rev().next().map(|name| {
-        if name.contains('.') {
-            name.to_string()
-        } else {
-            format!("{}.mp4", name)
-        }
-    });
-    match result {
-        Some(name) => Ok(name),
-        None => bail!("failed to infer a file name from {}", url.as_str()),
-    }
-}
-
 async fn download_video(url: &str) -> Result<(u64, String)> {
     for times in 1..4 {
         match do_download_video(url).await {
@@ -161,28 +142,9 @@ async fn download_video(url: &str) -> Result<(u64, String)> {
 
 async fn do_download_video(url: &str) -> Result<(u64, String)> {
     let response = CLIENT.get(url).send().await?.error_for_status()?;
-    let file_name = get_file_name(response.url()).unwrap_or(format!("{}.mp4", nanoid!()));
-    let path = format!("{}/{}", cfg::BOT_CONFIG.twitter_videos_path, file_name);
-    let size = response.content_length().unwrap_or(0);
-    info!("downloading video from {} to {}, size: {}", url, path, size);
-
-    if let Ok(metadata) = tokio::fs::metadata(&path).await {
-        let len = metadata.len();
-        if len == size {
-            return Ok((size, path));
-        }
-        warn!(
-            "video file {} exists, but size unmatched, expected {} actual {}",
-            path, size, len
-        )
-    }
-
-    let mut file = File::create(&path).await?;
-    let mut stream = response.bytes_stream();
-    while let Some(item) = stream.next().await {
-        file.write_all(&item?).await?;
-    }
-    info!("download finished for url {}", url);
+    let file_name = utils::get_file_name(response.url()).unwrap_or(format!("{}.mp4", nanoid!()));
+    let path = format!("{}/{}", cfg::BOT_CONFIG.download_path, file_name);
+    let size = utils::download_file_if_not_exists(response, &path).await?;
     Ok((size, path))
 }
 
